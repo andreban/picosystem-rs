@@ -16,7 +16,7 @@ pub use hal::pac;
 #[used]
 pub static BOOT2_FIRMWARE: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
-pub const XOSC_CRYSTAL_FREQ: u32 = 12_000_000;
+pub const XOSC_CRYSTAL_FREQ: u32 = 12_000_000; // 12 MHz
 
 hal::bsp_pins!(
     Gpio0 {

@@ -19,33 +19,39 @@ use embedded_hal::spi::MODE_0;
 // A few traits required for using the CountDown timer
 use embedded_hal::timer::CountDown;
 use embedded_time::duration::Extensions;
-use embedded_time::rate::Extensions as RateExtensions;
+use embedded_time::rate::{Extensions as RateExtensions};
 use embedded_time::fixed_point::FixedPoint;
 
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::pixelcolor::{Rgb565, RgbColor};
 
 use hal::gpio::{FunctionSpi};
+use heapless::String;
 // Ensure we halt the program on panic (if we don't mention this crate it won't
 // be linked)
 use panic_halt as _;
 
 // The macro for our start-up function
-use picosystem_rs::entry;
+use pimoroni_picosystem::entry;
 
 // A shorter alias for the Hardware Abstraction Layer, which provides
 // higher-level drivers.
-use picosystem_rs::hal;
+use pimoroni_picosystem::hal;
+use pimoroni_picosystem::XOSC_CRYSTAL_FREQ;
 
 // A few traits required for using the CountDown timer
-use picosystem_rs::hal::pac;
-use picosystem_rs::hal::Clock;
-use picosystem_rs::hal::Timer;
-use picosystem_rs::hal::spi::Spi;
+use pimoroni_picosystem::hal::{
+    pac,
+    Clock,
+    Timer,
+    spi::Spi,
+};
 
 use display_interface_spi::SPIInterface;
 use st7789::ST7789;
 use cortex_m::delay::Delay;
+
+const PWM_DIV: u8 = 40;
 
 #[entry]
 fn main() -> ! {
@@ -61,7 +67,7 @@ fn main() -> ! {
     //
     // The default is to generate a 125 MHz system clock
     let clocks = hal::clocks::init_clocks_and_plls(
-        picosystem_rs::XOSC_CRYSTAL_FREQ,
+        pimoroni_picosystem::XOSC_CRYSTAL_FREQ,
         pac.XOSC,
         pac.CLOCKS,
         pac.PLL_SYS,
@@ -76,7 +82,7 @@ fn main() -> ! {
     let sio = hal::Sio::new(pac.SIO);
 
     // Set the pins up according to their function on this particular board
-    let pins = picosystem_rs::Pins::new(
+    let pins = pimoroni_picosystem::Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
@@ -128,11 +134,14 @@ fn main() -> ! {
     display.init(&mut lcd_delay).unwrap();
     display.clear(Rgb565::RED).unwrap();
 
+    let sys_clock = clocks.system_clock.freq().integer();
+    let str = String::<255>::from(sys_clock);
     let text_style = MonoTextStyleBuilder::new()
         .font(&FONT_6X10)
         .text_color(Rgb565::WHITE)
         .build();
-    let text = Text::new("Hello, World!", Point::new(80, 120), text_style);
+    let text =
+        Text::new(&str, Point::new(80, 120), text_style);
     text.draw(&mut display).unwrap();
 
     let rect_style = PrimitiveStyleBuilder::new()
@@ -149,16 +158,46 @@ fn main() -> ! {
     let button_y = pins.button_y.into_pull_down_input();
     let button_a = pins.button_a.into_pull_down_input();
     let button_b = pins.button_b.into_pull_down_input();
+    let button_down = pins.button_down.into_pull_down_input();
 
     // Buzzer
+
+    /// (CLK / DIV / FREQ * 2) == (12000000 / 40 / 261.63)
+    fn calc_note(freq: f32) -> u16 {
+        (XOSC_CRYSTAL_FREQ as f32 / PWM_DIV as f32 / freq * 2.0) as u16 
+    }
+
+    // Notes
+    let c4 = calc_note(261.63);
+    let c4_sharp = calc_note(277.18);
+    let d4 = calc_note(293.66);
+    let d4_sharp = calc_note(311.1);
+    let e4 = calc_note(329.63);
+    let f4 = calc_note(349.23);
+    let f4_sharp = calc_note(369.99);
+    let g4 = calc_note(392.00);
+    let g4_sharp = calc_note(415.30);
+    let a4 = calc_note(440.00);
+    let a4_sharp = calc_note(466.16);
+    let b4 = calc_note(493.88);
+
+    let doremi = [c4, d4, e4, f4, g4, a4, b4];
+
+    let twinkle_twinkle = [
+        c4, c4, g4, g4, a4, a4, g4,
+        f4, f4, e4, e4, d4, d4, c4,
+        g4, g4, f4, f4, e4, e4, d4,
+        g4, g4, f4, f4, e4, e4, d4,
+        c4, c4, g4, g4, a4, a4, g4,
+        f4, f4, e4, e4, d4, d4, c4,
+    ];
+
     let pwm_slices = hal::pwm::Slices::new(pac.PWM, &mut pac.RESETS);
     let mut buzzer = pwm_slices.pwm5;
-    buzzer.set_ph_correct();
-    buzzer.enable();
 
-    let channel = &mut buzzer.channel_b;
-    channel.output_to(pins.audio);
-    channel.set_duty(0);
+    buzzer.enable();
+    buzzer.channel_b.output_to(pins.audio);
+    buzzer.set_div_int(PWM_DIV);
 
     led_red.set_low().unwrap();
     led_green.set_low().unwrap();
@@ -185,10 +224,26 @@ fn main() -> ! {
         }
 
         if button_b.is_low().unwrap() {
-            channel.set_duty(440);
-            delay.start(200.milliseconds());
-            let _ = nb::block!(delay.wait());
-            channel.set_duty(0);
+            buzzer.channel_b.set_duty(1000);
+            for top in doremi {
+                buzzer.set_top(top);
+                delay.start(1.seconds());
+                let _ = nb::block!(delay.wait());
+            }                          
+            buzzer.channel_b.set_duty(0);
+        }
+        
+        if button_down.is_low().unwrap() {
+            for top in twinkle_twinkle {
+                buzzer.channel_b.set_duty(1000);
+                buzzer.set_top(top);
+                delay.start(500.milliseconds());
+                let _ = nb::block!(delay.wait());
+
+                buzzer.channel_b.set_duty(0);
+                delay.start(100.milliseconds());
+                let _ = nb::block!(delay.wait());
+            }                          
         }
 
         delay.start(16.milliseconds());
