@@ -162,9 +162,12 @@ fn main() -> ! {
 
     // Buzzer
 
+    let pwm_slices = hal::pwm::Slices::new(pac.PWM, &mut pac.RESETS);
+    let mut buzzer = pwm_slices.pwm5;
+
     /// (CLK / DIV / FREQ * 2) == (12000000 / 40 / 261.63)
     fn calc_note(freq: f32) -> u16 {
-        (XOSC_CRYSTAL_FREQ as f32 / PWM_DIV as f32 / freq * 2.0) as u16 
+        (XOSC_CRYSTAL_FREQ as f32 / PWM_DIV as f32 / freq) as u16 
     }
 
     // Notes
@@ -180,20 +183,19 @@ fn main() -> ! {
     let a4 = calc_note(440.00);
     let a4_sharp = calc_note(466.16);
     let b4 = calc_note(493.88);
+    let space = calc_note(0.0);
 
     let doremi = [c4, d4, e4, f4, g4, a4, b4];
 
     let twinkle_twinkle = [
-        c4, c4, g4, g4, a4, a4, g4,
-        f4, f4, e4, e4, d4, d4, c4,
-        g4, g4, f4, f4, e4, e4, d4,
-        g4, g4, f4, f4, e4, e4, d4,
-        c4, c4, g4, g4, a4, a4, g4,
-        f4, f4, e4, e4, d4, d4, c4,
+        c4, c4, g4, g4, a4, a4, g4, space,
+        f4, f4, e4, e4, d4, d4, c4, space,
+        g4, g4, f4, f4, e4, e4, d4, space,
+        g4, g4, f4, f4, e4, e4, d4, space,
+        c4, c4, g4, g4, a4, a4, g4, space,
+        f4, f4, e4, e4, d4, d4, c4, space,
     ];
 
-    let pwm_slices = hal::pwm::Slices::new(pac.PWM, &mut pac.RESETS);
-    let mut buzzer = pwm_slices.pwm5;
 
     buzzer.enable();
     buzzer.channel_b.output_to(pins.audio);
@@ -223,9 +225,9 @@ fn main() -> ! {
             led_blue.set_high().unwrap();
         }
 
-        if button_b.is_low().unwrap() {
-            buzzer.channel_b.set_duty(1000);
+        if button_b.is_low().unwrap() {            
             for top in doremi {
+                buzzer.channel_b.set_duty(top / 2); // Square Wave
                 buzzer.set_top(top);
                 delay.start(1.seconds());
                 let _ = nb::block!(delay.wait());
@@ -235,7 +237,7 @@ fn main() -> ! {
         
         if button_down.is_low().unwrap() {
             for top in twinkle_twinkle {
-                buzzer.channel_b.set_duty(1000);
+                buzzer.channel_b.set_duty(top / 2);
                 buzzer.set_top(top);
                 delay.start(500.milliseconds());
                 let _ = nb::block!(delay.wait());
