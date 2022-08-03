@@ -183,7 +183,7 @@ fn main() -> ! {
     let a4 = calc_note(440.00);
     let a4_sharp = calc_note(466.16);
     let b4 = calc_note(493.88);
-    let space = calc_note(0.0);
+    let space = 0;
 
     let doremi = [c4, d4, e4, f4, g4, a4, b4];
 
