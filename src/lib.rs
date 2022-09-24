@@ -29,18 +29,18 @@ hal::bsp_pins!(
     },
     Gpio2 { name: vbus_detect },
     Gpio4 { name: lcd_reset },
-    Gpio5 { 
+    Gpio5 {
         name: lcd_cs
         aliases: { FunctionSpi: LcdCs }
     },
-    Gpio6 { 
+    Gpio6 {
         name: lcd_sclk
         aliases: { FunctionSpi: Sclk }
     },
-    Gpio7 { 
+    Gpio7 {
         name: lcd_mosi, // TX
         aliases: { FunctionSpi: Mosi}
-    }, 
+    },
     Gpio8 { name: lcd_vsync },
     Gpio9 { name: lcd_dc},
     Gpio11 {
